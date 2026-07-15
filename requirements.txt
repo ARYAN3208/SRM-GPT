@@ -1,0 +1,124 @@
+# =========================
+# FASTAPI + SERVER
+# =========================
+
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+pydantic-settings
+python-dotenv
+
+# =========================
+# WEB SCRAPING
+# =========================
+
+requests
+beautifulsoup4
+lxml
+html5lib
+aiohttp
+httpx
+fake-useragent
+tldextract
+
+# =========================
+# DOCUMENT LOADING
+# =========================
+
+pypdf
+pdfplumber
+python-docx
+pymupdf
+
+# =========================
+# OCR
+# =========================
+
+pytesseract
+Pillow
+
+# =========================
+# DATA PROCESSING
+# =========================
+
+pandas
+numpy
+
+# =========================
+# TEXT CLEANING + NLP
+# =========================
+
+nltk
+regex
+langdetect
+
+# =========================
+# CHUNKING + EMBEDDINGS
+# =========================
+
+sentence-transformers
+torch
+transformers
+
+# =========================
+# VECTOR DATABASE
+# =========================
+
+chromadb
+
+# =========================
+# RETRIEVAL
+# =========================
+
+rank-bm25
+scikit-learn
+
+# =========================
+# OLLAMA + LLM
+# =========================
+
+ollama
+
+# =========================
+# ANALYTICS + VISUALIZATION
+# =========================
+
+matplotlib
+plotly
+
+# =========================
+# EVALUATION
+# =========================
+
+ragas
+deepeval
+
+# =========================
+# LOGGING + MONITORING
+# =========================
+
+loguru
+
+# =========================
+# TESTING
+# =========================
+
+pytest
+pytest-asyncio
+
+# =========================
+# UTILITIES
+# =========================
+
+tqdm
+tenacity
+joblib
+
+# =========================
+# CORS + SECURITY
+# =========================
+
+python-jose
+passlib
+bcrypt
