@@ -234,7 +234,7 @@ def _deduplicate_rows(rows: List[Tuple[float, str, Dict[str, Any]]]) -> List[Tup
 # ----------------------------
 def retrieve_documents(
     query: str,
-    top_k: int = 10
+    top_k: int = 50
 ) -> Dict[str, List[List[Any]]]:
     """
     Retrieve relevant documents from Chroma.

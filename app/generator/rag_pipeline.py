@@ -20,14 +20,14 @@ LOW_CONFIDENCE = 40
 RETRIEVAL_POOL_SIZE = 60
 FEE_ADMISSION_POOL_SIZE = 80
 # Reduced top_k for reranker to keep only the most relevant docs
-RERANK_KEEP = 12
+RERANK_KEEP = 25
 FEE_ADMISSION_RERANK_KEEP = 15
 # Loosened distance thresholds slightly (all-mpnet-base-v2 has different distribution)
 DISTANCE_FILTER_THRESHOLD = 0.40
-MIN_ACCEPTABLE_DOCS = 4
+MIN_ACCEPTABLE_DOCS = 50
 RELAXED_DISTANCE_THRESHOLD = 0.50
 STRICT_DISTANCE_THRESHOLD = 0.30
-MIN_GOOD_DOCS = 2
+MIN_GOOD_DOCS = 25
 
 
 def _general_mode_answer(question, model_name, num_predict, start_time):
