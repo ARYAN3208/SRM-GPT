@@ -178,11 +178,11 @@ def _is_boilerplate(text: str) -> bool:
         return True
 
     boilerplate_patterns = [
-        "home", "about us", "contact us", "privacy policy",
-        "terms and conditions", "copyright", "all rights reserved",
-        "login", "register", "faq", "news", "events", "careers",
-        "sitemap", "follow us", "download", "menu",
         "skip to main content",
+        "privacy policy",
+        "terms and conditions",
+        "all rights reserved",
+        "copyright 20",
     ]
 
     if any(pattern in text for pattern in boilerplate_patterns):

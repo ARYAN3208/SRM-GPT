@@ -22,12 +22,12 @@ FEE_ADMISSION_POOL_SIZE = 80
 # Reduced top_k for reranker to keep only the most relevant docs
 RERANK_KEEP = 25
 FEE_ADMISSION_RERANK_KEEP = 15
-# Loosened distance thresholds slightly (all-mpnet-base-v2 has different distribution)
-DISTANCE_FILTER_THRESHOLD = 0.40
-MIN_ACCEPTABLE_DOCS = 50
-RELAXED_DISTANCE_THRESHOLD = 0.50
-STRICT_DISTANCE_THRESHOLD = 0.30
-MIN_GOOD_DOCS = 25
+# Cosine distance in Chroma ranges 0-2. Values ~0.5-1.5 are typical for relevant docs.
+DISTANCE_FILTER_THRESHOLD = 1.0
+MIN_ACCEPTABLE_DOCS = 10
+RELAXED_DISTANCE_THRESHOLD = 1.3
+STRICT_DISTANCE_THRESHOLD = 0.7
+MIN_GOOD_DOCS = 5
 
 
 def _general_mode_answer(question, model_name, num_predict, start_time):
@@ -119,16 +119,17 @@ def _process_retrieval(question, intent, model_name, num_predict, start):
             "response_time": round(time.time() - start, 2)
         }
 
-    # Compute confidence based on top distances
+    # Compute confidence based on top distances (cosine: 0=perfect, 2=opposite)
     top_distances = [item[0] for item in rows[:5]]
     avg_distance = sum(top_distances) / len(top_distances)
-    confidence = max(0, min(100, round((1 - avg_distance) * 100, 2)))
+    # Scale: cosine 0→100%, cosine 2→0%
+    confidence = max(0, min(100, round((1 - avg_distance / 2) * 100, 2)))
 
-    if avg_distance <= 0.20:
+    if avg_distance <= 0.35:
         retrieval_quality = "excellent"
-    elif avg_distance <= 0.32:
+    elif avg_distance <= 0.7:
         retrieval_quality = "good"
-    elif avg_distance <= 0.42:
+    elif avg_distance <= 1.1:
         retrieval_quality = "weak"
     else:
         retrieval_quality = "poor"
@@ -157,22 +158,13 @@ def _process_retrieval(question, intent, model_name, num_predict, start):
         })
 
     # Rerank using full document text (not truncated)
-    retrieved_docs = rerank_documents(
+    # New reranker returns (reranked_docs, reranked_metadatas) with index-safe metadata alignment
+    retrieved_docs, reranked_docs_info = rerank_documents(
         query=question,
         documents=raw_docs,
+        metadatas=docs_info,
         top_k=rerank_keep
     )
-
-    # Reorder metadata to match reranked docs
-    # Build a mapping from original doc text to its metadata
-    doc_to_meta = {doc: meta for doc, meta in zip(raw_docs, docs_info)}
-
-    reranked_docs_info = []
-    for rdoc in retrieved_docs:
-        if rdoc in doc_to_meta:
-            reranked_docs_info.append(doc_to_meta[rdoc])
-        else:
-            reranked_docs_info.append({"source": "unknown", "chunk_id": "unknown", "distance": 0})
 
     # If retrieval quality is poor AND we have very few reranked docs, return not found
     if avg_distance > STRICT_DISTANCE_THRESHOLD and len(retrieved_docs) < MIN_GOOD_DOCS:

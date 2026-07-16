@@ -1,6 +1,6 @@
 import logging
 import numpy as np
-from typing import List, Tuple, Union
+from typing import Dict, List, Tuple
 
 logger = logging.getLogger("reranker")
 
@@ -32,103 +32,98 @@ def _get_reranker():
         logger.error("Failed to load reranker model: %s", exc, exc_info=True)
         raise RuntimeError(f"Failed to load reranker: {str(exc)}") from exc
 
+
 def rerank_documents(
     query: str,
     documents: List[str],
+    metadatas: List[Dict] = None,
     top_k: int = 10,
-    return_scores: bool = False
-) -> Union[List[str], List[Tuple[str, float]]]:
+) -> Tuple[List[str], List[Dict]]:
     """
     Rerank documents using CrossEncoder based on query relevance.
-    
+    Returns (docs, metadatas) both reordered by rank.
+    Uses original indices to keep metadata aligned with reranked docs.
+
     Args:
         query: The search query
         documents: List of documents to rerank
+        metadatas: Optional list of metadata dicts matching each document
         top_k: Number of top documents to return
-        return_scores: If True, return (document, score) tuples
-    
+
     Returns:
-        List of top-k reranked documents (with or without scores)
+        Tuple of (reranked_docs, reranked_metadatas)
     """
     try:
-        # Validate inputs
         if not documents:
             logger.warning("No documents provided for reranking")
-            return [] if not return_scores else []
+            return [], [] if metadatas else []
 
-        # Sanitize query
         query_clean = query.strip() if isinstance(query, str) else str(query).strip()
         if not query_clean:
             logger.error("Invalid query")
-            return [] if not return_scores else []
+            return [], [] if metadatas else []
 
-        # Sanitize documents
-        docs_clean = []
-        for doc in documents:
-            if isinstance(doc, str):
-                docs_clean.append(doc.strip())
-            else:
-                docs_clean.append(str(doc).strip())
-        
-        # Filter empty documents
-        docs_clean = [d for d in docs_clean if d]
+        indexed_docs = []
+        for idx, doc in enumerate(documents):
+            cleaned = doc.strip() if isinstance(doc, str) else str(doc).strip()
+            if cleaned:
+                indexed_docs.append((idx, cleaned))
 
-        if not docs_clean:
+        if not indexed_docs:
             logger.error("No valid documents after sanitization")
-            return [] if not return_scores else []
+            return [], [] if metadatas else []
 
-        logger.info(f"Reranking {len(docs_clean)} documents for query: {query_clean[:50]}...")
+        docs_clean = [d for _, d in indexed_docs]
+        original_idx_map = [i for i, _ in indexed_docs]
 
-        # Create query-document pairs
+        logger.info("Reranking %d documents for query: %s...", len(docs_clean), query_clean[:50])
+
         pairs = [(query_clean, doc) for doc in docs_clean]
+        reranker_model = _get_reranker()
 
-        # Get reranker
-        reranker = _get_reranker()
-
-        # Predict scores
         try:
-            scores = reranker.predict(pairs)
-            logger.info(f"Reranker produced {len(scores)} scores (type: {type(scores).__name__})")
+            scores = reranker_model.predict(pairs)
+            logger.info("Reranker produced %d scores (type: %s)", len(scores), type(scores).__name__)
         except Exception as score_exc:
-            logger.error(f"Reranking prediction failed: {score_exc}", exc_info=True)
+            logger.error("Reranking prediction failed: %s", score_exc, exc_info=True)
             raise RuntimeError(f"Reranking failed: {str(score_exc)}") from score_exc
 
-        # Convert numpy array to list if needed
         if isinstance(scores, np.ndarray):
             scores = scores.tolist()
-            logger.debug("Converted numpy array scores to list")
 
-        # Validate scores length (more lenient check)
         if not isinstance(scores, (list, tuple)) or len(scores) == 0:
-            logger.error(f"Invalid scores: expected non-empty list, got {type(scores).__name__}")
+            logger.error("Invalid scores: expected non-empty list, got %s", type(scores).__name__)
             raise ValueError("Reranker returned invalid scores")
 
         if len(scores) != len(docs_clean):
-            logger.error(f"Score count mismatch: expected {len(docs_clean)}, got {len(scores)}")
+            logger.error("Score count mismatch: expected %d, got %d", len(docs_clean), len(scores))
             raise ValueError(f"Score count mismatch: {len(scores)} vs {len(docs_clean)}")
 
-        # Rank documents by score
-        ranked = list(zip(docs_clean, scores))
-        ranked.sort(key=lambda x: float(x[1]), reverse=True)
+        # Rank by score, keeping original index
+        ranked = list(zip(original_idx_map, docs_clean, scores))
+        ranked.sort(key=lambda x: float(x[2]), reverse=True)
 
-        # Log top scores
         top_scores = ranked[:min(5, len(ranked))]
-        logger.info(f"Top reranking scores: {[round(float(score), 4) for doc, score in top_scores]}")
+        logger.info("Top reranking scores: %s", [round(float(s), 4) for _, _, s in top_scores])
 
-        # Enforce top_k limit
         top_k = min(top_k, len(ranked))
         result = ranked[:top_k]
 
-        if return_scores:
-            logger.info(f"Returning {len(result)} documents with scores")
-            return [(doc, float(score)) for doc, score in result]
+        reranked_docs = [doc for _, doc, _ in result]
 
-        # Extract documents only
-        docs_only = [doc for doc, score in result]
-        logger.info(f"Returning {len(docs_only)} reranked documents")
+        reranked_metas = []
+        if metadatas:
+            for orig_idx, _, _ in result:
+                if orig_idx < len(metadatas):
+                    reranked_metas.append(metadatas[orig_idx])
+                else:
+                    reranked_metas.append({"source": "unknown", "chunk_id": "unknown", "distance": 0})
+        else:
+            reranked_metas = []
 
-        return docs_only
+        logger.info("Returning %d reranked documents", len(reranked_docs))
+        return reranked_docs, reranked_metas
 
     except Exception as exc:
-        logger.error(f"Reranking pipeline failed: {exc}", exc_info=True)
+        logger.error("Reranking pipeline failed: %s", exc, exc_info=True)
         raise RuntimeError(f"Document reranking failed: {str(exc)}") from exc

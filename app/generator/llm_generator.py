@@ -38,7 +38,7 @@ def sanitize_prompt(prompt: str) -> str:
     # Truncate to max length - keep the END (context) not the beginning (instructions)
     if len(sanitized) > MAX_PROMPT_LENGTH:
         logger.warning(f"Prompt truncated from {len(prompt)} to {MAX_PROMPT_LENGTH} chars")
-        sanitized = sanitized[-MAX_PROMPT_LENGTH:]
+        sanitized = sanitized[:MAX_PROMPT_LENGTH]
     
     return sanitized.strip()
 
