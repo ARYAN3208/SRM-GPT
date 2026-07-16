@@ -1,0 +1,60 @@
+================================================================================
+SRM DATASET AUDIT REPORT
+================================================================================
+
+Generated At : 2026-07-16T11:54:34.773300
+
+WEBSITE AUDIT
+--------------------------------------------------------------------------------
+Coverage           : 90.16%
+Live URLs          : 7900
+Scraped URLs       : 7530
+Missing URLs       : 777
+Duplicate URLs     : 0
+Empty Pages        : 599
+Error Pages        : 0
+
+PDF AUDIT
+--------------------------------------------------------------------------------
+Coverage           : 100.0%
+Downloaded PDFs    : 627
+Parsed PDFs        : 630
+Duplicate PDFs     : 0
+Empty PDFs         : 1
+Corrupted PDFs     : 0
+Missing Parsed     : 0
+
+OCR AUDIT
+--------------------------------------------------------------------------------
+Coverage           : 33.33%
+Searchable PDFs    : 627
+Scanned PDFs       : 3
+OCR Completed      : 1
+OCR Missing        : 2
+Missing PDF Files  : 0
+
+RAG AUDIT
+--------------------------------------------------------------------------------
+Dataset Score      : 93.6/100
+Total Chunks       : 130308
+Duplicate Chunks   : 8338
+Duplicate IDs      : 0
+Empty Chunks       : 0
+Small Chunks       : 98
+Large Chunks       : 12079
+Missing Metadata   : 0
+Average Length     : 707.17
+
+SOURCE DISTRIBUTION
+--------------------------------------------------------------------------------
+ktr pdf                       44227
+ktr website                   39902
+new scraped                   46179
+
+================================================================================
+OVERALL SUMMARY
+================================================================================
+Website Coverage : 90.16%
+PDF Coverage     : 100.00%
+OCR Coverage     : 33.33%
+RAG Score        : 93.60/100

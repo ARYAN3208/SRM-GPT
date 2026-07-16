@@ -1,146 +1,168 @@
-import requests
 import json
-from pathlib import Path
 import time
+from pathlib import Path
+import requests
+from bs4 import BeautifulSoup
+import xml.etree.ElementTree as ET
 
 BASE_DIR = Path(__file__).resolve().parent
 RAW_DIR = BASE_DIR / "raw"
-RAW_DIR.mkdir(parents=True, exist_ok=True)
 
-MISSING_OUT = RAW_DIR / "missing_urls_scraped.json"
+KTR_FILE = RAW_DIR / "ktr_website_data.json"
+NEW_FILE = RAW_DIR / "new_scraped_data.json"
+CACHE_FILE = RAW_DIR / "all_sitemap_urls_cache.json"
+
 SITEMAP_URL = "https://www.srmist.edu.in/sitemap.xml"
 
 
-def get_all_urls_from_sitemap(sitemap_url):
-    """Extract all URLs from sitemap.xml"""
-    try:
-        response = requests.get(sitemap_url, timeout=10)
-        import xml.etree.ElementTree as ET
-        root = ET.fromstring(response.content)
-        
-        urls = []
-        for url in root.findall('.//{http://www.sitemaps.org/schemas/sitemap/0.9}loc'):
-            urls.append(url.text)
-        
-        return urls
-    except Exception as e:
-        print(f"Error fetching sitemap: {e}")
-        return []
+def normalize_url(url):
+    if not url:
+        return ""
+    return url.strip().rstrip("/")
 
 
-def get_existing_urls():
-    """Get all URLs from existing JSON files"""
-    existing = set()
-    
-    for json_file in RAW_DIR.glob("*.json"):
-        try:
-            with open(json_file, 'r', encoding='utf-8') as f:
+def get_all_urls():
+    if CACHE_FILE.exists():
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        if isinstance(data, list):
+            if not data:
+                return []
+            if isinstance(data[0], dict):
+                return [normalize_url(x["url"]) for x in data if x.get("url")]
+            return [normalize_url(x) for x in data]
+
+        if isinstance(data, dict):
+            if "urls" in data:
+                return [normalize_url(x) for x in data["urls"]]
+            return [normalize_url(x) for x in data.keys()]
+
+    response = requests.get(SITEMAP_URL, timeout=20)
+    response.raise_for_status()
+
+    root = ET.fromstring(response.content)
+
+    urls = []
+    for node in root.findall(".//{http://www.sitemaps.org/schemas/sitemap/0.9}loc"):
+        if node.text:
+            urls.append(normalize_url(node.text))
+
+    return urls
+
+
+def load_existing_data():
+    records = []
+
+    for file in (KTR_FILE, NEW_FILE):
+        if file.exists():
+            with open(file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                for record in data:
-                    if isinstance(record, dict) and record.get('url'):
-                        existing.add(record['url'])
-        except:
-            pass
-    
+                if isinstance(data, list):
+                    records.extend(data)
+
+    return records
+
+
+def get_existing_urls(records):
+    existing = set()
+
+    for item in records:
+        if not isinstance(item, dict):
+            continue
+
+        url = normalize_url(item.get("url", ""))
+        text = item.get("text", "").strip()
+
+        if not url or not text:
+            continue
+
+        if text.startswith("[HTTP") or text.startswith("[Error"):
+            continue
+
+        if text == "[Empty page - no content]":
+            continue
+
+        existing.add(url)
+
     return existing
 
 
 def scrape_url(url):
-    """Scrape single URL - GET EVERYTHING, even empty content"""
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
+
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        response = requests.get(url, timeout=10, headers=headers)
-        
-        if response.status_code == 200:
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Remove script and style elements
-            for script in soup(["script", "style"]):
-                script.decompose()
-            
-            text = soup.get_text(separator=' ', strip=True)
-            text = " ".join(text.split())
-            
-            # ✅ ACCEPT ALL - even if empty or 0 words
-            return {
-                'url': url,
-                'text': text if text else "[Empty page - no content]",
-                'title': soup.title.string if soup.title else '',
-                'file': ''
-            }
-        else:
-            # Still add even if error status
-            return {
-                'url': url,
-                'text': f"[HTTP {response.status_code} - Could not scrape]",
-                'title': '',
-                'file': ''
-            }
-    except Exception as e:
-        # Add even if network error
+        r = requests.get(url, headers=headers, timeout=20)
+        r.raise_for_status()
+
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        for tag in soup(["script", "style", "noscript", "header", "footer", "nav"]):
+            tag.decompose()
+
+        main = (
+            soup.find("main")
+            or soup.find("article")
+            or soup.find(class_="entry-content")
+            or soup.find(class_="content")
+            or soup.body
+            or soup
+        )
+
+        title = soup.title.get_text(strip=True) if soup.title else ""
+
+        text = main.get_text(" ", strip=True)
+        text = " ".join(text.split())
+
         return {
-            'url': url,
-            'text': f"[Error: {str(e)}]",
-            'title': '',
-            'file': ''
+            "source": "website",
+            "url": normalize_url(url),
+            "title": title,
+            "text": text,
+        }
+
+    except Exception as e:
+        return {
+            "source": "website",
+            "url": normalize_url(url),
+            "title": "",
+            "text": f"[Error: {e}]",
         }
 
 
 def main():
     print("=" * 70)
-    print("SCRAPING ALL MISSING URLS (INCLUDING EMPTY PAGES)")
+    print("SCRAPE REMAINING URLS")
     print("=" * 70)
-    
-    # Get all sitemap URLs
-    print("\n📡 Fetching sitemap.xml...")
-    sitemap_urls = get_all_urls_from_sitemap(SITEMAP_URL)
-    print(f"✅ Sitemap has: {len(sitemap_urls)} URLs")
-    
-    # Get existing URLs
-    print("\n📊 Checking existing data...")
-    existing_urls = get_existing_urls()
-    print(f"✅ Already have: {len(existing_urls)} URLs")
-    
-    # Find missing
-    missing_urls = [url for url in sitemap_urls if url not in existing_urls]
-    print(f"❌ Missing: {len(missing_urls)} URLs")
-    
-    if not missing_urls:
-        print("\n✅ All URLs already have data!")
+
+    sitemap_urls = get_all_urls()
+    existing_records = load_existing_data()
+    existing_urls = get_existing_urls(existing_records)
+
+    print("Sitemap URLs     :", len(sitemap_urls))
+    print("Already Scraped  :", len(existing_urls))
+
+    remaining = [u for u in sitemap_urls if u not in existing_urls]
+
+    print("Remaining URLs   :", len(remaining))
+
+    if not remaining:
+        print("Nothing to scrape.")
         return
-    
-    # Scrape ALL missing URLs
-    print(f"\n" + "=" * 70)
-    print(f"🕷️  SCRAPING {len(missing_urls)} MISSING URLS...")
-    print("=" * 70)
-    
-    scraped_data = []
-    
-    for i, url in enumerate(missing_urls, 1):
-        print(f"[{i}/{len(missing_urls)}] {url[:70]}")
-        
-        result = scrape_url(url)
-        # ✅ ADD ALL - no filtering
-        if result:
-            scraped_data.append(result)
-        
-        # Rate limit
+
+    new_records = []
+
+    for i, url in enumerate(remaining, 1):
+        print(f"[{i}/{len(remaining)}] {url}")
+        new_records.append(scrape_url(url))
         time.sleep(1)
-    
-    # Save ALL missing URLs data
-    if scraped_data:
-        with open(MISSING_OUT, 'w', encoding='utf-8') as f:
-            json.dump(scraped_data, f, indent=2, ensure_ascii=False)
-        
-        print("\n" + "=" * 70)
-        print(f"✅ SUCCESS!")
-        print("=" * 70)
-        print(f"📊 Total scraped: {len(scraped_data)} URLs")
-        print(f"💾 Saved to: {MISSING_OUT}")
-        print("=" * 70)
+
+    with open(NEW_FILE, "w", encoding="utf-8") as f:
+        json.dump(new_records, f, indent=2, ensure_ascii=False)
+
+    print("Saved:", NEW_FILE)
 
 
 if __name__ == "__main__":
