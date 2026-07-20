@@ -1,176 +1,187 @@
 from pathlib import Path
 import json
-import re
-import hashlib
-import unicodedata
 from collections import Counter
 
 BASE_DIR = Path(__file__).resolve().parent
+
 RAW_DIR = BASE_DIR / "raw"
 FINAL_DIR = BASE_DIR / "final"
+
 FINAL_DIR.mkdir(parents=True, exist_ok=True)
+
 FINAL_OUT = FINAL_DIR / "rag_data.json"
 
+
 TARGET_FILES = [
-    "ktr_pdf_data.json",
-    "ktr_website_data.json",
-    "new_scraped_data.json",
+    "ktr_pdf_data.json",          
+    "ktr_website_data.json",        
+    "new_scraped_data.json",    
+    "missing_urls_scraped.json",
+    "subdomains_scraped_data.json"
+    
 ]
+
 
 def load_json(path):
     if not path.exists():
-        print(f"File not found: {path.name}")
+        print(f"⚠️  Missing: {path.name}")
         return []
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"Error reading {path.name}: {e}")
+        print(f"Error loading {path}: {e}")
         return []
 
+
 def extract_text(item):
-    if not isinstance(item, dict):
-        return ""
     if "pages" in item:
-        texts = []
-        for page in item.get("pages", []):
-            if isinstance(page, dict):
-                t = page.get("text", "").strip()
-                if t:
-                    texts.append(t)
-        return "\n\n".join(texts)
-    return (item.get("text") or item.get("content") or "").strip()
+        texts = [page.get("text", "") for page in item["pages"]]
+        return "\n\n".join(filter(None, texts))
+    return item.get("text") or item.get("content") or ""
+
 
 def clean_text(text):
     if not text:
         return ""
-    text = unicodedata.normalize("NFKC", text)
-    text = text.replace("\x00", " ").replace("\ufeff", " ")
-    text = re.sub(r"\.{5,}|…{3,}|·{3,}", " ", text)
-    text = re.sub(r"[_=-]{5,}", " ", text)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+    text = text.replace("\x00", " ")
+    return " ".join(text.split()).strip()
 
-def is_garbled(text):
-    if len(text) < 20:
-        return True
-    total = len(text)
-    letters = sum(c.isalpha() for c in text)
-    printable = sum(c.isprintable() for c in text)
-    controls = sum(unicodedata.category(c).startswith("C") for c in text)
-    symbols = sum(c in "|~[]{}<>\\^`" for c in text)
-    if printable / total < 0.85:
-        return True
-    if controls / total > 0.05:
-        return True
-    if symbols / total > 0.15:
-        return True
-    if letters / total < 0.10:
-        return True
-    return False
 
-def normalize_records(records, source):
-    docs = []
+def normalize_records(records, source_name):
+    normalized = []
+    skipped = 0
+
     for item in records:
         if not isinstance(item, dict):
+            skipped += 1
             continue
+
         text = clean_text(extract_text(item))
-        if len(text) < 20:
+
+        if not text or len(text) < 20:
+            skipped += 1
             continue
-        if is_garbled(text):
-            continue
-        docs.append({
+
+        normalized.append({
             "text": text,
-            "source": source,
-            "document_type": "pdf" if "pdf" in source else "website",
-            "url": item.get("url","").strip(),
-            "file_name": item.get("file","").strip(),
-            "title": item.get("title","").strip()
+            "source": source_name,
+            "file_name": item.get("file", ""),
+            "url": item.get("url", ""),
+            "title": item.get("title", "")
         })
-    return docs
 
-def deduplicate_documents(docs):
-    unique=[]
-    seen_keys=set()
-    seen_text=set()
-    for d in docs:
-        key=d["url"] or d["file_name"]
-        th=hashlib.md5(d["text"].encode()).hexdigest()
-        if key and key in seen_keys:
-            continue
-        if th in seen_text:
-            continue
-        if key:
-            seen_keys.add(key)
-        seen_text.add(th)
-        unique.append(d)
-    return unique
+    print(f"  {source_name}: {len(normalized)} records ({skipped} skipped)")
+    return normalized
 
-def split_sentences(text):
-    parts=re.split(r'(?<=[.!?।])\s+|\n+',text)
-    return [p.strip() for p in parts if p.strip()]
 
-def chunk_text(text,chunk_size=700,overlap=120):
-    sents=split_sentences(text)
-    chunks=[]
-    current=""
-    for s in sents:
-        if not current:
-            current=s
-            continue
-        if len(current)+len(s)+1<=chunk_size:
-            current+=" "+s
-        else:
-            chunks.append(current)
-            words=current.split()
-            ov=""
-            while words and len(ov)<overlap:
-                ov=(words.pop()+" "+ov).strip()
-            current=(ov+" "+s).strip()
-    if current:
-        chunks.append(current)
-    return [c for c in chunks if len(c)>=30]
+def deduplicate_by_url(docs):
+    """Remove duplicate records by URL or file_name"""
+    seen = {}
+    unique = []
+    duplicates = 0
 
-def create_chunks(docs):
-    out=[]
-    seen=set()
     for doc in docs:
-        pieces=chunk_text(doc["text"])
-        total=len(pieces)
-        for i,p in enumerate(pieces,1):
-            h=hashlib.md5((doc["source"]+doc["url"]+doc["file_name"]+p).encode()).hexdigest()
-            if h in seen:
-                continue
-            seen.add(h)
-            out.append({
-                "chunk_id":h,
-                "text":p,
-                "source":doc["source"],
-                "document_type":doc["document_type"],
-                "file_name":doc["file_name"],
-                "url":doc["url"],
-                "title":doc["title"],
-                "chunk_number":i,
-                "total_chunks":total,
-                "chunk_length":len(p)
-            })
-    return out
+        url = doc.get("url", "").strip()
+        file_name = doc.get("file_name", "").strip()
+
+        key = url if url else file_name
+
+        if key:
+            if key not in seen:
+                seen[key] = True
+                unique.append(doc)
+            else:
+                duplicates += 1
+        else:
+            # No identifier - keep it
+            unique.append(doc)
+
+    return unique, duplicates
+
+
+def chunk_text(text, chunk_size=800, overlap=150):
+    if not text or len(text) < 10:
+        return [text] if text else []
+
+    chunks = []
+    start = 0
+
+    while start < len(text):
+        end = min(start + chunk_size, len(text))
+        chunks.append(text[start:end])
+        if end >= len(text):
+            break
+        start = end - overlap
+
+    return chunks
+
 
 def main():
-    docs=[]
-    for filename in TARGET_FILES:
-        data=load_json(RAW_DIR/filename)
-        if not data:
-            continue
-        source=filename.replace("_data.json","").replace(".json","").replace("_"," ")
-        docs.extend(normalize_records(data,source))
-    docs=deduplicate_documents(docs)
-    chunks=create_chunks(docs)
-    with open(FINAL_OUT,"w",encoding="utf-8") as f:
-        json.dump(chunks,f,indent=2,ensure_ascii=False)
-    print(f"Documents: {len(docs)}")
-    print(f"Chunks: {len(chunks)}")
-    print(f"Saved: {FINAL_OUT}")
+    all_docs = []
 
-if __name__=="__main__":
+    print("=" * 60)
+    print("Loading CLEAN source files from RAW folder:")
+    print("=" * 60)
+
+    for filename in TARGET_FILES:
+        path = RAW_DIR / filename
+        print(f"\n📂 {filename}")
+
+        if not path.exists():
+            print(f"  ❌ FILE NOT FOUND - skipping")
+            continue
+
+        data = load_json(path)
+        source_name = filename.replace("_data.json", "").replace(".json", "").replace("_", " ")
+        docs = normalize_records(data, source_name)
+        all_docs.extend(docs)
+
+    print("\n" + "=" * 60)
+    print(f"TOTAL DOCUMENTS (before dedup): {len(all_docs)}")
+    print("=" * 60)
+    print(Counter(x["source"] for x in all_docs))
+
+    # Deduplicate by URL
+    print("\n" + "=" * 60)
+    print("Deduplicating by URL...")
+    print("=" * 60)
+    all_docs, duplicates_removed = deduplicate_by_url(all_docs)
+    print(f"✅ Removed duplicates: {duplicates_removed}")
+    print(f"✅ Unique documents: {len(all_docs)}")
+    print("=" * 60)
+    print(Counter(x["source"] for x in all_docs))
+
+    # Chunk
+    print("\n" + "=" * 60)
+    print("Chunking documents...")
+    print("=" * 60)
+    chunked = []
+
+    for doc_index, doc in enumerate(all_docs):
+        chunks = chunk_text(doc["text"])
+        for chunk_index, chunk in enumerate(chunks, start=1):
+            chunked.append({
+                "chunk_id": f"{doc['source']}-{doc_index}-{chunk_index}",
+                "text": chunk,
+                "source": doc["source"],
+                "file_name": doc["file_name"],
+                "url": doc["url"],
+                "title": doc.get("title", "")
+            })
+
+    # Save
+    with open(FINAL_OUT, "w", encoding="utf-8") as f:
+        json.dump(chunked, f, indent=2, ensure_ascii=False)
+
+    print("\n" + "=" * 60)
+    print("✅ SUCCESS!")
+    print("=" * 60)
+    print(f"📊 Total unique documents : {len(all_docs)}")
+    print(f"📊 Total chunks           : {len(chunked)}")
+    print(f"💾 Saved to               : {FINAL_OUT}")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
     main()

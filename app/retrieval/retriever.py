@@ -26,11 +26,11 @@ DEFAULT_PERSIST_DIR = os.getenv(
 _alt_persist_dir = os.path.join(BASE_DIR, "data", "chroma_db")
 if not os.path.exists(DEFAULT_PERSIST_DIR) and os.path.exists(_alt_persist_dir):
     DEFAULT_PERSIST_DIR = _alt_persist_dir
-# CRITICAL: Must match the embedding model used during ingestion (BAAI/bge-small-en-v1.5)
-# Stored embeddings were generated with this model; query embeddings must use the same.
+# CRITICAL: Must match the embedding model used during ingestion
+# Stored embeddings were generated with all-MiniLM-L6-v2; query embeddings must use the same.
 DEFAULT_EMBEDDING_MODEL = os.getenv(
     "EMBEDDING_MODEL",
-    "BAAI/bge-small-en-v1.5"
+    "sentence-transformers/all-MiniLM-L6-v2"
 )
 
 _collection = None
@@ -65,20 +65,14 @@ def _get_embedding_model():
 # ----------------------------
 def _expand_query(query: str) -> List[str]:
     """
-    BGE models benefit from adding a task prefix for retrieval.
     Generate multiple query variants to improve recall.
+    Uses keyword extraction for better matching.
     """
     query = query.strip()
     if not query:
         return [query]
 
-    # BGE models perform better with the "Represent this sentence for searching: " prefix
-    # Add both with and without prefix for maximal coverage
     variants = [query]
-
-    # Add BGE-optimized retrieval query
-    bgd_query = f"Represent this sentence for searching: {query}"
-    variants.append(bgd_query)
 
     # Add keyword-focused variant if query is long enough
     words = query.split()
@@ -282,7 +276,7 @@ def retrieve_documents(
         # Embed the query ourselves using the same model that generated the stored embeddings
         model = _get_embedding_model()
 
-        # Try primary query first (without BGE prefix for better general matching)
+        # Try primary query first (without prefix for better general matching)
         query_embedding = model.encode([query_variants[0]], normalize_embeddings=True)[0].tolist()
         results = collection.query(
             query_embeddings=[query_embedding],
@@ -298,7 +292,7 @@ def retrieve_documents(
         all_metas.extend(metas)
         all_dists.extend(dists)
 
-        # If few results, fall back to BGE-optimized query and keyword variants
+        # If few results, try keyword variants
         if len(docs) < 20 and len(query_variants) > 1:
             for variant in query_variants[1:]:
                 var_embedding = model.encode([variant], normalize_embeddings=True)[0].tolist()

@@ -268,21 +268,20 @@ def generate_answer(
         error_text = str(e).lower()
         logger.warning(f"Primary model failed: {error_text}")
 
-        # Fallback: Try Groq if available
-        if "quota" in error_text or "429" in error_text:
-            logger.info("Quota/rate limit hit, trying Groq fallback...")
-            if os.getenv("GROQ_API_KEY"):
-                try:
-                    return _generate_groq(safe_prompt, "llama-3.3-70b", num_predict)
-                except Exception as groq_exc:
-                    logger.error(f"Groq fallback failed: {groq_exc}")
-
-            # Fallback: Try Ollama
-            logger.info("Trying Ollama fallback...")
+        # Fallback: Try Groq if available (for any error including quota, permission, etc.)
+        if os.getenv("GROQ_API_KEY"):
+            logger.info("Trying Groq fallback...")
             try:
-                return _generate_ollama(safe_prompt, "ollama:llama3:8b")
-            except Exception as ollama_exc:
-                logger.error(f"Ollama fallback failed: {ollama_exc}")
+                return _generate_groq(safe_prompt, "llama-3.3-70b", num_predict)
+            except Exception as groq_exc:
+                logger.error(f"Groq fallback failed: {groq_exc}")
+
+        # Fallback: Try Ollama if running locally
+        logger.info("Trying Ollama fallback...")
+        try:
+            return _generate_ollama(safe_prompt, "ollama:llama3:8b")
+        except Exception as ollama_exc:
+            logger.error(f"Ollama fallback failed: {ollama_exc}")
 
         logger.error(f"Generation failed (all retries exhausted): {str(e)}")
         return f"Generation Error: {str(e)[:200]}"

@@ -41,7 +41,7 @@ with st.sidebar:
     selected_model_name = st.selectbox(
         "Choose Model",
         list(MODEL_OPTIONS.keys()),
-        index=0
+        index=2  # Default to Groq model (index 2) since Gemini has API issues
     )
     selected_model = MODEL_OPTIONS[selected_model_name]
     
