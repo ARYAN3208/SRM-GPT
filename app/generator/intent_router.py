@@ -32,6 +32,19 @@ def detect_intent(question):
     if gratitude:
         return "general"
 
+    # ============ PERSON QUERIES (detect before SRM-specific keywords) ============
+    # Queries asking about specific people should go to SRM to find faculty info
+    person_query_patterns = [
+        r"who is\s+(?:dr\.?|prof\.?|professor)?\s*[a-z]",
+        r"(?:dr\.?|prof\.?|professor)\s+[a-z]",
+        r"hod\s+of\s+[a-z]",
+        r"head\s+of\s+department\s+[a-z]",
+        r"faculty\s+[a-z]",
+        r"[a-z]\.?\s*[a-z]+\s+[a-z]+\s+of\s+[a-z]",
+    ]
+    if any(re.search(pattern, q) for pattern in person_query_patterns):
+        return "srm"  # Route to SRM knowledge base to find faculty info
+
     # ============ SRM-SPECIFIC INTENTS (check first) ============
 
     fee_structure_keywords = [

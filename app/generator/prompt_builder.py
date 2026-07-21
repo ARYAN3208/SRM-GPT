@@ -126,7 +126,9 @@ For fee questions: Give exact amounts with programme names. Separate components 
 For hostel questions: Cover room types, facilities, fees, mess details.
 For placement questions: Provide statistics, packages, recruiters.
 For faculty questions: Names, designations, departments.
-For lab questions: Names, facilities, equipment."""
+For lab questions: Names, facilities, equipment.
+
+IMPORTANT: Extract and present the relevant information in a well-structured format. Do not omit key details like exact fees, contact emails, or specific program names. If the context has the exact answer, present it directly."""
 
     estimated_tokens = len(final_prompt) // 4
     logger.info(f"Final prompt length: {len(final_prompt)} chars (~{estimated_tokens} tokens)")
