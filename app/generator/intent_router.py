@@ -1,20 +1,19 @@
 import re
+from typing import Set
+
+from app.utils.logger import get_logger
+
+logger = get_logger("intent_router")
 
 
-def contains_word(text, word):
-    return re.search(
-        rf"\b{re.escape(word)}\b",
-        text
-    ) is not None
+def contains_word(text: str, word: str) -> bool:
+    return re.search(rf"\b{re.escape(word)}\b", text) is not None
 
 
-def detect_intent(question):
+def detect_intent(question: str) -> str:
     q = question.lower().strip()
     q_words = q.split()
-    q_len = len(q)
 
-    # ============ VERY SHORT GREETING / IDENTITY QUERIES ============
-    # These are clearly general even if they contain SRM-related words
     identity_queries = [
         "who are you", "who created you", "what are you", "what is your name",
         "introduce yourself", "tell me about yourself", "your name",
@@ -22,18 +21,19 @@ def detect_intent(question):
         "what's your name", "are you ai", "are you chatbot"
     ]
     if any(kw in q for kw in identity_queries):
+        logger.info("Intent detected: general (identity query)")
         return "general"
 
     greeting_short = q in {"hi", "hello", "hey", "heyy", "hii", "hlo", "yo", "sup", "hi there", "hello there"}
     if greeting_short:
+        logger.info("Intent detected: general (greeting)")
         return "general"
 
     gratitude = q in {"thanks", "thank you", "ty", "thankyou", "thanks a lot", "thank you so much"}
     if gratitude:
+        logger.info("Intent detected: general (gratitude)")
         return "general"
 
-    # ============ PERSON QUERIES (detect before SRM-specific keywords) ============
-    # Queries asking about specific people should go to SRM to find faculty info
     person_query_patterns = [
         r"who is\s+(?:dr\.?|prof\.?|professor)?\s*[a-z]",
         r"(?:dr\.?|prof\.?|professor)\s+[a-z]",
@@ -43,9 +43,8 @@ def detect_intent(question):
         r"[a-z]\.?\s*[a-z]+\s+[a-z]+\s+of\s+[a-z]",
     ]
     if any(re.search(pattern, q) for pattern in person_query_patterns):
-        return "srm"  # Route to SRM knowledge base to find faculty info
-
-    # ============ SRM-SPECIFIC INTENTS (check first) ============
+        logger.info("Intent detected: srm (person query)")
+        return "srm"
 
     fee_structure_keywords = [
         "fee structure", "complete fee", "full fee", "fee details",
@@ -56,8 +55,7 @@ def detect_intent(question):
         "fee per year", "fee per semester", "cost of", "how much does",
         "what is the fee", "what are the fees", "tell me the fee"
     ]
-
-    fee_related = {"fee", "fees", "cost", "pricing", "price"}
+    fee_related: Set[str] = {"fee", "fees", "cost", "pricing", "price"}
     program_keywords = {
         "b.tech": ["b.tech", "btech"],
         "m.tech": ["m.tech", "mtech"],
@@ -68,20 +66,14 @@ def detect_intent(question):
         "mca": ["mca"],
         "bca": ["bca"]
     }
-
-    has_fee = any(
-        any(fee_word in word for word in q_words)
-        for fee_word in fee_related
-    )
-    has_program = any(
-        any(variant in q for variant in variants)
-        for variants in program_keywords.values()
-    )
+    has_fee = any(any(fee_word in word for word in q_words) for fee_word in fee_related)
+    has_program = any(any(variant in q for variant in variants) for variants in program_keywords.values())
 
     if any(keyword in q for keyword in fee_structure_keywords):
+        logger.info("Intent detected: fee_structure")
         return "fee_structure"
-
     if has_fee and has_program:
+        logger.info("Intent detected: fee_structure (fee + program)")
         return "fee_structure"
 
     admission_procedure_keywords = [
@@ -97,11 +89,9 @@ def detect_intent(question):
         "admission form", "application form", "apply now", "admission open",
         "admission 2025", "admission 2026"
     ]
-
     if any(keyword in q for keyword in admission_procedure_keywords):
+        logger.info("Intent detected: admission_procedure")
         return "admission_procedure"
-
-    # ============ ACADEMIC POLICIES (SRM-specific) ============
 
     academic_policy_keywords = [
         "detain", "detained", "detention", "attendance", "backlog",
@@ -109,11 +99,9 @@ def detect_intent(question):
         "condonation", "re-exam", "reexam", "supplementary exam",
         "promotion rule", "regulation"
     ]
-
     if any(keyword in q for keyword in academic_policy_keywords):
+        logger.info("Intent detected: srm (academic policy)")
         return "srm"
-
-    # ============ BROAD SRM KEYWORDS ============
 
     srm_keywords = [
         "srm", "srmist", "ktr",
@@ -141,51 +129,42 @@ def detect_intent(question):
         "event", "events",
         "anti-ragging"
     ]
-
     if any(contains_word(q, keyword) for keyword in srm_keywords):
+        logger.info("Intent detected: srm (keyword match)")
         return "srm"
 
-    # ============ GENERAL INTENT (truly general queries) ============
-
     general_indicators = [
-        # Programming & technical
         "write code", "programming", "python", "javascript", "react",
         "how to code", "algorithm", "data structure",
-        # Small talk
         "how are you", "thanks", "thank you",
         "good morning", "good evening",
-        # General knowledge (non-SRM)
         "what is ai", "what is machine learning", "tell me a joke",
         "tell me something interesting", "who created", "history of",
         "explain quantum", "explain black hole", "define",
-        # Career advice (general, not SRM-specific)
         "how to prepare for interview", "resume tips",
         "how to crack interview", "career in tech"
     ]
-
     if any(keyword in q for keyword in general_indicators):
+        logger.info("Intent detected: general (general indicator)")
         return "general"
 
-    # Emotional/guidance keywords - route to general
     guidance_keywords = [
         "stress", "depression", "mental health", "anxiety",
         "friend problem", "roommate"
     ]
-
     if any(kw in q for kw in guidance_keywords):
+        logger.info("Intent detected: general (guidance)")
         return "general"
 
-    # Future/prediction keywords - route to general
-    future_keywords = ["2030", "2029", "2028", "future", "predict",
-                       "prediction", "forecast"]
+    future_keywords = {"2030", "2029", "2028", "future", "predict", "prediction", "forecast"}
     if any(kw in q for kw in future_keywords):
+        logger.info("Intent detected: general (future/prediction)")
         return "general"
 
-    # Generic "help me", "advice", "suggest"
-    generic_help = ["what can i do", "help me", "suggest", "advice",
-                    "confused", "worried", "recommend"]
+    generic_help = {"what can i do", "help me", "suggest", "advice", "confused", "worried", "recommend"}
     if any(kw in q for kw in generic_help):
+        logger.info("Intent detected: general (help/advice)")
         return "general"
 
-    # Default: route to SRM retrieval (better to attempt search than give ungrounded answer)
+    logger.info("Intent detected: srm (default fallback)")
     return "srm"
