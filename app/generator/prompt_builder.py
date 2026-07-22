@@ -9,6 +9,8 @@ MAX_CHARS_PER_DOC = 4000
 MAX_CONTEXT_CHARS = 15000
 MAX_PROMPT_TOKENS = 12000
 
+SRM_FULL_FORM = 'Sri Ramaswamy Memorial'
+
 
 def sanitize_context(text: str) -> str:
     if not isinstance(text, str):
@@ -85,12 +87,14 @@ def build_prompt(
         'You are SRM CampusGPT, an AI assistant for SRM Institute of Science and Technology.\n\n'
         'Answer the user\'s question using ONLY the SRM information below.\n\n'
         'CONTEXT:\n'
+        f'[KNOWN FACT] The full form of SRM is {SRM_FULL_FORM}.\n'
         f'{context}\n\n'
         'QUESTION: ' + question_clean + '\n\n'
         'INSTRUCTIONS:\n'
-        '- Answer the question thoroughly using all relevant information from the context.\n'
-        '- Include every specific number, fee, percentage, eligibility criterion, date, and name that helps answer the question.\n'
-        '- Organize the answer with bullet points or sections for clarity.\n'
+        '- Focus STRICTLY on what is asked. If the question mentions a specific department, answer ONLY for that department. Ignore all information about other departments.\n'
+        '- Extract the specific number or data point requested. Present it clearly at the top of your answer.\n'
+        '- Do NOT add commentary about missing details. Do NOT say \'no specific details are mentioned\', \'I could not find any details\', or similar. Just state what the context says and stop.\n'
+        '- Use bullet points only if listing multiple items that directly answer the question.\n'
         '- If the context has nothing relevant, say: "' + not_found_msg + '"\n'
         '- Do not add meta-commentary like \'based on the context\' or \'according to the documents\'.'
     )
