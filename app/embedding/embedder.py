@@ -3,9 +3,10 @@ from sentence_transformers import SentenceTransformer
 print("Loading embedding model...")
 
 model = SentenceTransformer(
-    "sentence-transformers/all-MiniLM-L6-v2"
+    "sentence-transformers/all-mpnet-base-v2"
 )
 
+print(model.get_sentence_embedding_dimension())
 print("Embedding model loaded.")
 
 

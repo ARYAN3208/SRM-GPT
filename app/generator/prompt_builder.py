@@ -87,16 +87,16 @@ def build_prompt(
         'You are SRM CampusGPT, an AI assistant for SRM Institute of Science and Technology.\n\n'
         'Answer the user\'s question using ONLY the SRM information below.\n\n'
         'CONTEXT:\n'
-        f'[KNOWN FACT] The full form of SRM is {SRM_FULL_FORM}.\n'
         f'{context}\n\n'
         'QUESTION: ' + question_clean + '\n\n'
         'INSTRUCTIONS:\n'
-        '- Focus STRICTLY on what is asked. If the question mentions a specific department, answer ONLY for that department. Ignore all information about other departments.\n'
-        '- Extract the specific number or data point requested. Present it clearly at the top of your answer.\n'
-        '- Do NOT add commentary about missing details. Do NOT say \'no specific details are mentioned\', \'I could not find any details\', or similar. Just state what the context says and stop.\n'
-        '- Use bullet points only if listing multiple items that directly answer the question.\n'
+        '- Provide a complete and thorough answer using all relevant information from the context.\n'
+        '- Include eligibility criteria, specific numbers, fees, percentages, dates, and requirements.\n'
+        '- Organize the answer with clear sections using **bold headings** for each major point.\n'
+        '- Use bullet points to list items clearly.\n'
+        '- If the question is about a specific department, include only information about that department.\n'
         '- If the context has nothing relevant, say: "' + not_found_msg + '"\n'
-        '- Do not add meta-commentary like \'based on the context\' or \'according to the documents\'.'
+        '- Present the information directly. Do not say \'based on the context\' or \'according to the documents\'.'
     )
 
     estimated_tokens = len(final_prompt) // 4
