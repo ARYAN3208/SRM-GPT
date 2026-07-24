@@ -183,7 +183,7 @@ def _deduplicate_rows(
 
 def retrieve_documents(
     query: str,
-    top_k: int = 50,
+    top_k: int = 25,
 ) -> Dict[str, List[List[Any]]]:
     if not isinstance(query, str) or not query.strip():
         logger.warning("Empty query provided to retrieve_documents")
